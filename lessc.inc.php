@@ -118,7 +118,7 @@ class lessc {
 		}
 
 		$this->addParsedFile($realPath);
-		$parser = $this->makeParser($realPath);
+		$parser = $this->makeParser($realPath, $url);
 		$root = $parser->parse(file_get_contents($realPath));
 
 		// set the parents of all the block props
@@ -1939,8 +1939,8 @@ class lessc {
 		return $out;
 	}
 
-	protected function makeParser($name) {
-		$parser = new lessc_parser($this, $name);
+	protected function makeParser($name, $url = null) {
+		$parser = new lessc_parser($this, $name, $url);
 		$parser->writeComments = $this->preserveComments;
 
 		return $parser;
@@ -2226,12 +2226,13 @@ class lessc_parser {
 	// caches preg escaped literals
 	static protected $literalCache = array();
 
-	public function __construct($lessc, $sourceName = null) {
+	public function __construct($lessc, $sourceName = null, $relativeName = null) {
 		$this->eatWhiteDefault = true;
 		// reference to less needed for vPrefix, mPrefix, and parentSelector
 		$this->lessc = $lessc;
 
 		$this->sourceName = $sourceName; // name used for error messages
+		$this->relativeName = $relativeName; // name used for rewrite URL
 
 		$this->writeComments = false;
 
@@ -2258,6 +2259,7 @@ class lessc_parser {
 		$this->pushSpecialBlock("root");
 		$this->eatWhiteDefault = true;
 		$this->seenComments = array();
+        $this->rewriteUrl();
 
 		// trim whitespace on head
 		// if (preg_match('/^\s+/', $this->buffer, $m)) {
@@ -2464,7 +2466,31 @@ class lessc_parser {
 		return false; // got nothing, throw error
 	}
 
-	protected function isDirective($dirname, $directives) {
+    protected function rewriteUrl()
+    {
+        preg_match_all('/url\s*?\((.*?)\)/i', $this->buffer, $matches, PREG_SET_ORDER);
+        foreach ($matches as $k => &$v) {
+            $addedDir = $this->relativeName && dirname($this->relativeName) != '.' ? dirname($this->relativeName).'/' : '';
+            $v[2] = $addedDir.trim($v[1], '"\'');
+            $v[3] = $this->cleanChildDir($v[2]);
+            $this->buffer = str_replace($v[0], 'url(\''.$v[3].'\')', $this->buffer);
+        }
+    }
+
+    protected function cleanChildDir($dir)
+    {
+        return $dir;
+        $part = explode('/', $dir);
+        foreach ($part as $k => $v) {
+            if ($v == '..' && isset($part[$k - 1])) {
+                unset($part[$k - 1]);
+                unset($part[$k]);
+            }
+        }
+        return implode('/', $part);
+    }
+
+    protected function isDirective($dirname, $directives) {
 		// TODO: cache pattern in parser
 		$pattern = implode("|",
 			array_map(array("lessc", "preg_quote"), $directives));
