@@ -2258,6 +2258,7 @@ class lessc_parser {
 		$this->pushSpecialBlock("root");
 		$this->eatWhiteDefault = true;
 		$this->seenComments = array();
+		$this->rewriteUrl();
 
 		// trim whitespace on head
 		// if (preg_match('/^\s+/', $this->buffer, $m)) {
@@ -2462,6 +2463,28 @@ class lessc_parser {
 		if ($this->literal(';')) return true;
 
 		return false; // got nothing, throw error
+	}
+
+	protected function rewriteUrl()
+	{
+		preg_match_all('/url\s*?\((.*?)\)/i', $this->buffer, $matches, PREG_SET_ORDER);
+		foreach ($matches as $k => &$v) {
+			$v[2] = dirname($this->sourceName).'/'.trim($v[1], '"\'');
+			$v[3] = $this->cleanChildDir($v[2]);
+			$this->buffer = str_replace($v[0], 'url(\''.$v[3].'\')', $this->buffer);
+		}
+	}
+
+	protected function cleanChildDir($dir)
+	{
+		$part = explode('/', $dir);
+		foreach ($part as $k => $v) {
+			if ($v == '..' && isset($part[$k - 1])) {
+				unset($part[$k - 1]);
+				unset($part[$k]);
+			}
+		}
+		return implode('/', $part);
 	}
 
 	protected function isDirective($dirname, $directives) {
